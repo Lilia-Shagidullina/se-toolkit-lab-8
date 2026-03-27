@@ -36,15 +36,7 @@ Start by reading the [official nanobot repository](https://github.com/HKUDS/nano
    From this point on, treat `nanobot/` inside the repository as the source of truth for this lab.
    Later tasks should build on this same project instead of copying state from your home directory.
 
-3. Install the nanobot. Pick one:
-
-   Latest version from `main`:
-
-   ```terminal
-   uv add "nanobot-ai @ https://github.com/HKUDS/nanobot/archive/refs/heads/main.zip"
-   ```
-
-   Pinned version from a specific commit SHA (more reproducible):
+3. Install the tested nanobot version:
 
    ```terminal
    uv add "nanobot-ai @ https://github.com/HKUDS/nanobot/archive/e7d371ec1e6531b28898ec2c869ef338e8dd46ec.zip"
@@ -78,7 +70,7 @@ Start by reading the [official nanobot repository](https://github.com/HKUDS/nano
 
    ```terminal
    cd nanobot
-   uv run nanobot agent -c ./config.json
+   uv run nanobot agent --logs --session cli:task1a-chat -c ./config.json
    ```
 
    This starts an interactive CLI session. Try asking:
@@ -93,16 +85,15 @@ Start by reading the [official nanobot repository](https://github.com/HKUDS/nano
 
    ```terminal
    cd nanobot
-   uv run nanobot agent -c ./config.json -m "What is 2+2?"
+   uv run nanobot agent --logs --session cli:task1a-oneshot -c ./config.json -m "What is 2+2?"
    ```
 
    > [!TIP]
-   > While developing, prefer `uv run nanobot agent -c ./config.json --logs ...`
-   > so you can see tool registration and tool calls.
+   > Keep `--logs` enabled while developing so you can see tool registration and tool calls.
    >
-   > If you want to compare agent
-   > behavior from a clean conversational state, start a fresh session with
-   > `--session cli:some-new-name` instead of reusing `cli:direct`.
+   > When comparing behavior before and after MCP or skills, always use a fresh
+   > session name such as `--session cli:task1a`, `--session cli:task1b`, or
+   > `--session cli:task1c` instead of reusing `cli:direct`.
 
 <!-- STOP -->
 > [!CAUTION]
@@ -115,8 +106,8 @@ Start by reading the [official nanobot repository](https://github.com/HKUDS/nano
 
 ### Checkpoint for Part A
 
-1. Run `cd nanobot && uv run nanobot agent -c ./config.json -m "What is the agentic loop?"` — you should get a reasonable answer.
-2. Run `cd nanobot && uv run nanobot agent -c ./config.json -m "What labs are available in our LMS?"` — it should **not** return real backend data. It may say it does not know, or it may inspect local repo files and answer from documentation instead of the live LMS.
+1. Run `cd nanobot && uv run nanobot agent --logs --session cli:task1a-loop -c ./config.json -m "What is the agentic loop?"` — you should get a reasonable answer.
+2. Run `cd nanobot && uv run nanobot agent --logs --session cli:task1a-labs -c ./config.json -m "What labs are available in our LMS?"` — it should **not** return real backend data. It may say it does not know, or it may inspect local repo files and answer from documentation instead of the live LMS.
 3. Paste both responses into `REPORT.md` under `## Task 1A — Bare agent`.
 
 ---
@@ -140,33 +131,57 @@ The LMS MCP server is provided in `mcp/lms_mcp/`. It exposes the backend API as 
    uv add lms-mcp --editable ../mcp
    ```
 
-2. Add the MCP server to your repo-local nanobot config (`nanobot/config.json`). Check the [nanobot docs](https://github.com/HKUDS/nanobot) for how to configure MCP servers. It runs as a subprocess via `python -m lms_mcp`.
+2. Add the MCP server to your repo-local nanobot config (`nanobot/config.json`). It runs as a subprocess via `python -m lms_mcp`.
+
+   The MCP part of your config should look like this:
+
+   ```json
+   {
+     "tools": {
+       "mcpServers": {
+         "lms": {
+           "command": "python",
+           "args": ["-m", "lms_mcp"]
+         }
+       }
+     }
+   }
+   ```
 
    > [!NOTE]
    > `python -m lms_mcp` works here because you start nanobot with `uv run`.
    > The MCP subprocess inherits the same Python environment, so `python` resolves
    > to the repo-local interpreter where `lms-mcp` is installed.
 
-   > **Hint:** The MCP server needs the backend URL and backend API key. Set them as environment variables:
+   > **Hint:** The MCP server needs the backend URL and backend API key. Pass them as environment variables:
    > `NANOBOT_LMS_BACKEND_URL=http://localhost:42002`
    > `NANOBOT_LMS_API_KEY=...`
    >
    > The LMS key stays on the agent side. Later, the web client will use a separate `NANOBOT_ACCESS_KEY`, not the backend key.
+   >
+   > Do not assume `${VAR}` placeholders inside `config.json` will be expanded for you.
+   > Either pass the variables inline on the command line, or add a real `env`
+   > object under `mcpServers.lms` if you want the config file itself to provide
+   > them.
 
 3. Test with the agent:
 
    ```terminal
    cd nanobot
-   NANOBOT_LMS_BACKEND_URL=http://localhost:42002 NANOBOT_LMS_API_KEY=YOUR_LMS_API_KEY uv run nanobot agent -c ./config.json -m "What labs are available?"
+   NANOBOT_LMS_BACKEND_URL=http://localhost:42002 NANOBOT_LMS_API_KEY=YOUR_LMS_API_KEY uv run nanobot agent --logs --session cli:task1b-labs -c ./config.json -m "What labs are available?"
    ```
 
    The agent should now call the MCP tools and return **real lab names** from the backend.
+
+   > [!NOTE]
+   > If the agent reports that the backend is healthy but there are no labs yet,
+   > ask it to trigger the LMS sync pipeline, then retry the question.
 
 4. Try a more complex question:
 
    ```terminal
    cd nanobot
-   NANOBOT_LMS_BACKEND_URL=http://localhost:42002 NANOBOT_LMS_API_KEY=YOUR_LMS_API_KEY uv run nanobot agent -c ./config.json -m "Which lab has the lowest pass rate?"
+   NANOBOT_LMS_BACKEND_URL=http://localhost:42002 NANOBOT_LMS_API_KEY=YOUR_LMS_API_KEY uv run nanobot agent --logs --session cli:task1b-pass-rates -c ./config.json -m "Which lab has the lowest pass rate?"
    ```
 
    The agent should chain multiple tool calls to figure this out.
@@ -196,6 +211,16 @@ The agent works, but it could be smarter about *how* it uses tools. A **skill pr
 
 1. Write a skill prompt in your repo-local nanobot workspace, for example at `nanobot/workspace/skills/lms/SKILL.md`.
 
+   Start it with frontmatter so nanobot loads it reliably:
+
+   ```md
+   ---
+   name: lms
+   description: Use LMS MCP tools for live course data
+   always: true
+   ---
+   ```
+
    The skill should teach the agent:
    - Which `lms_*` tools are available and when to use each one
    - When a lab parameter is needed and not provided, ask the user which lab
@@ -205,7 +230,12 @@ The agent works, but it could be smarter about *how* it uses tools. A **skill pr
 
    > **Hint:** Look at the tools in `mcp/lms_mcp/server.py` to see what's available and what parameters each tool needs.
 
-2. Test the difference — ask the same questions and see if the agent's behavior improves.
+2. Test the difference with a fresh session name so old conversation state does not leak into the result:
+
+   ```terminal
+   cd nanobot
+   uv run nanobot agent --logs --session cli:task1c -c ./config.json -m "Show me the scores"
+   ```
 
 <!-- STOP -->
 > [!CAUTION]

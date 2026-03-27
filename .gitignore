@@ -17,3 +17,5 @@ tmp
 .lycheecache
 
 /nanobot/.python-version
+
+/nanobot/config.json
